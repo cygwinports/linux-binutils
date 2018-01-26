@@ -1,0 +1,114 @@
+NAME="linux-binutils"
+VERSION=2.29.1
+RELEASE=1
+CATEGORY="Devel"
+SUMMARY="Binutils for Linux kernel toolchains"
+DESCRIPTION="Assember, linker, and other binary utilities required for the
+AVR embedded cross-compiling toolchain"
+HOMEPAGE="http://www.gnu.org/software/binutils/"
+case ${VERSION} in
+*.*.[5-9][0-9])
+	SRC_URI="mirror://sourceware/binutils/snapshots/binutils-${VERSION}.tar.bz2" ;;
+*)	SRC_URI="mirror://gnu/binutils/binutils-${VERSION}.tar.bz2" ;;
+esac
+SRC_DIR="binutils-${VERSION%[a-z]}"
+PATCH_URI="
+	http://pkgs.fedoraproject.org/cgit/rpms/binutils.git/plain/binutils-2.20.51.0.2-libtool-lib64.patch
+	http://pkgs.fedoraproject.org/cgit/rpms/binutils.git/plain/binutils-2.25-version.patch
+	http://pkgs.fedoraproject.org/cgit/rpms/binutils.git/plain/binutils-2.22.52.0.1-export-demangle.h.patch
+	http://pkgs.fedoraproject.org/cgit/rpms/binutils.git/plain/binutils-2.22.52.0.4-no-config-h-check.patch
+	http://pkgs.fedoraproject.org/cgit/rpms/binutils.git/plain/binutils-2.26-lto.patch
+	http://pkgs.fedoraproject.org/cgit/rpms/binutils.git/plain/binutils-2.29-skip-rp14918-test-for-arm.patch
+	http://pkgs.fedoraproject.org/cgit/rpms/binutils.git/plain/binutils-2.29-filename-in-error-messages.patch
+	http://pkgs.fedoraproject.org/cgit/rpms/binutils.git/plain/binutils-2.29.1-gold-start-stop.patch
+	http://pkgs.fedoraproject.org/cgit/rpms/binutils.git/plain/binutils-2.29.1-readelf-use-dynamic.patch
+	2.29-textdomain.patch
+"
+
+targets=(
+	aarch64-linux
+	alpha-linux
+	am33_2.0-linux
+	arm-linuxeabi
+	bfin-uclinux
+	c6x-uclinux
+	cris-linux
+	frv-linux
+	h8300-linux
+	hppa-linux
+	hppa64-linux
+	ia64-linux
+	m32r-linux
+	m68k-linux
+	microblaze-linux
+	mips64-linux
+	nios2-linux
+	powerpc64-linux
+	powerpc64le-linux
+	riscv64-linux
+	s390x-linux
+	sh-linux
+	sparc64-linux
+	tilegx-linux
+	x86_64-linux
+	xtensa-linux
+)
+
+PKG_NAMES="${NAME}-common"
+linux_binutils_common_CONTENTS="usr/share/doc/ usr/share/locale/"
+
+for tgt in ${targets[*]}
+do
+	tgtname=${tgt%-gnu*}
+	PKG_NAMES+=" ${tgtname}-binutils"
+	declare ${tgtname//[-\.]/_}_binutils_SUMMARY="Binutils for ${tgt%-*} Linux kernel toolchain"
+	declare ${tgtname//[-\.]/_}_binutils_REQUIRES=${NAME}-common
+	declare ${tgtname//[-\.]/_}_binutils_CONTENTS="usr/bin/$tgt-* usr/$tgt/ usr/share/man/man1/$tgt-*"
+done
+
+src_compile() {
+	CYGCONF_SOURCE=${S}
+
+	for tgt in ${targets[*]}
+	do
+		CARGS=
+		case ${tgt} in
+		aarch64*|arm*|i?86*|x86_64*)
+			CARGS+=" --enable-targets=x86_64-pep" ;;
+		ia64-linux*)
+			CARGS+=" --enable-targets=i386-linux" ;;
+		powerpc64-linux*)
+			CARGS+=" --enable-targets=spu,powerpc64le-linux" ;;
+		powerpc64le-linux*)
+			CARGS+=" --enable-targets=spu,powerpc-linux" ;;
+		sh-linux*)
+			CARGS+=" --enable-targets=sh4-linux,sh-linux" ;;
+		esac
+
+		[ ! -d ${B}/$tgt ] || continue
+		mkdir -p ${B}/$tgt
+		pushd ${B}/$tgt
+		cygconf --target=$tgt --with-sysroot=/usr/$tgt/sys-root \
+			--enable-multilib \
+			--without-libiconv-prefix --without-libintl-prefix \
+			--with-system-zlib \
+			--disable-werror \
+			--disable-install-libbfd \
+			$CARGS
+		cygmake
+		popd
+	done
+}
+
+
+src_install() {
+	for tgt in ${targets[*]}
+	do
+		pushd ${B}/$tgt
+		cyginstall
+		popd
+	done
+
+	# conflicts with native binutils
+	rm -fr ${D}/usr/lib/ ${D}/usr/share/info/
+}
